@@ -5,3 +5,4 @@ __pycache__/
 
 # Ignore everything in the Data folder
 Data/processed*
+Data/raw/*.csv
