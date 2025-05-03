@@ -1,0 +1,424 @@
+import os
+import json
+
+import pandas as pd
+import numpy as np
+
+import matplotlib.pyplot as plt
+import seaborn as sns
+import plotly.express as px
+import plotly.graph_objects as go
+import plotly.io as pio
+pio.renderers.default = 'iframe'
+import folium
+import branca.colormap as cm  
+from branca.element import MacroElement, Template
+
+from IPython.display import display, clear_output
+
+# Pandas settings
+pd.set_option('future.no_silent_downcasting', True)
+
+
+
+const_colors = {
+  'Indre By':     '#241B5F',
+  'Østerbro':     '#46237A',
+  'Vesterbro':    '#4A4DE9',
+  'Nørrebro':     '#ABD2FA',
+  'Bispebjerg':   '#FFB400',
+  'Brønshøj':      '#FFC800',
+  'Valby':        '#FFE5B4',
+  'Falkoner':     '#FF5A00',
+  'Slots':         '#FF8427',
+  'Sundbyvester': '#D64161',
+  'Sundbyøster':  '#FF6273',
+  'Tårnby':       '#FF95A1'
+}
+
+
+const_order = ["Indre By", "Østerbro", "Vesterbro", "Nørrebro", "Bispebjerg", "Brønshøj", "Valby", "Falkoner", "Slots", "Sundbyvester", "Sundbyøster", "Tårnby"]
+
+
+
+def plot_stacked_bar_dist_per_const(years, kreds_ids, counts, legend, values, html, color_map, constituency_id_to_name, show_percentage=False, title="", y_title=""):
+    # Create DataFrame
+    df = pd.DataFrame({
+        'Year': years,
+        'KredsNr': kreds_ids,
+        f'{legend}': counts,
+        'Value': values})
+
+    # Map KredsNr to KredsName
+    df['KredsName'] = df['KredsNr'].map(constituency_id_to_name)
+
+    # Convert years to string for categorical x-axis
+    df['Year'] = df['Year'].astype(str)
+    df[f'{legend}'] = df[f'{legend}'].astype(str)
+
+    # Compute percentage if needed
+    if show_percentage:
+        df['Percentage'] = df['Value'] * 100
+        y_col = 'Percentage'
+        text_format = '%{text:.1f}%'
+        y_title = y_title
+    else:
+        y_col = 'Value'
+        text_format = '%{text:.0f}'
+        y_title = y_title
+
+    # Get sorted list of (KredsNr, KredsName)
+    kreds_list = []
+    for kreds_name in const_colors.keys():
+        kreds_nr = df[df['KredsName'] == kreds_name]['KredsNr'].iloc[0]
+        kreds_list.append((kreds_nr, kreds_name))
+
+    fig = go.Figure()
+
+    # Category list : parties 
+    all_categories = sorted(df[legend].unique())
+
+    # Create traces for each (KredsName, Category) combination
+    for kreds_nr, kreds_name in kreds_list:
+        kreds_df = df[df['KredsName'] == kreds_name]
+
+        for cat in all_categories:
+            cat_df = kreds_df[kreds_df[legend] == cat]
+
+            fig.add_trace(
+                go.Bar(
+                    x=cat_df['Year'],
+                    y=cat_df[y_col],
+                    name=cat, 
+                    legendgroup=cat,  
+                    marker_color=color_map.get(cat, '#333333'),
+                    text=cat_df[y_col],
+                    texttemplate=text_format,
+                    textposition='inside',
+                    visible=(kreds_name == 'Østerbro'),  
+                    hovertemplate=(
+                    f"<b>{cat}</b><br>" +
+                    f"{'Percentage' if show_percentage else 'Count'}: %{{y:.2f}}<extra></extra>")
+                )
+            )
+
+    # Checklist (checkbox-style menu)
+    num_categories = len(all_categories)
+    kreds_names_only = [k for _, k in kreds_list]
+
+    buttons = []
+    for i, kreds_name in enumerate(kreds_names_only):
+        visible = [False] * len(fig.data)
+        start_idx = i * num_categories
+
+        for j in range(num_categories):
+            visible[start_idx + j] = True
+
+        buttons.append(dict(
+            label=kreds_name,
+            method="update",
+            args=[
+                {"visible": visible},
+                {"title": f"{title}<br>({kreds_name})"}  
+            ]
+        ))
+    default = kreds_names_only[0]
+    fig.update_layout(
+        updatemenus=[
+            dict(
+                type="dropdown",
+                buttons=buttons,
+                x=1.05,  
+                y=1.25, 
+                active=0,  
+                showactive=True,
+                bgcolor="white",
+                bordercolor="black",
+                borderwidth=0.5,
+                font=dict(size=12),
+                direction="down"
+            )
+        ],
+        title=dict(
+            text=f"{title}<br>({default})",  
+            x=0.5, 
+            font=dict(
+                family="Arial",  
+                size=20,         
+                color="black")),
+        barmode='stack',
+        uniformtext_minsize=8,
+        uniformtext_mode='hide',
+        hovermode="x unified",
+        plot_bgcolor='rgba(0,0,0,0)',
+        yaxis_title=y_title,
+        xaxis_title="Election Year",
+        font=dict(
+            family="Arial",
+            size=12, 
+            color="black"),
+        showlegend=True,
+        legend_title_text=legend,
+        legend=dict(
+            title_font_family="Arial",
+            font=dict(size=12))
+    )
+
+    fig.update_xaxes(showline=True, linewidth=1, linecolor='lightgrey',
+                     showgrid=True, gridwidth=1, gridcolor='lightgrey')
+    fig.update_yaxes(showline=True, linewidth=1, linecolor='lightgrey',
+                     showgrid=True, gridwidth=1, gridcolor='lightgrey')
+
+    fig.write_html(html)
+    fig.show()
+
+
+def plot_bar_dist_per_const_multi(years, kreds_ids, values, html, const_colors, constituency_id_to_name, df_turnout_ratio, show_percentage=False, title="", y_axis_title=""):
+    # Create the DataFrame
+    df = pd.DataFrame({
+        'Year': [str(y) for y in years],
+        'KredsNr': kreds_ids,
+        'Value': values})
+
+    # Map KredsNr to name
+    df['KredsName'] = df['KredsNr'].map(constituency_id_to_name)
+
+    df['Percentage'] = df['Value'] * 100
+    y_col = 'Percentage'
+    text_format = '%{text:.1f}%'
+    y_title = y_axis_title
+
+    # Create traces for each Kreds
+    kreds_list = []
+    for kreds_name in const_order:
+        kreds_nr = df[df['KredsName'] == kreds_name]['KredsNr'].iloc[0]
+        kreds_list.append((kreds_nr, kreds_name))
+
+    fig = go.Figure()
+
+    for kreds_nr, kreds_name in kreds_list:
+        kreds_df = df[df['KredsName'] == kreds_name]
+
+        fig.add_trace(
+            go.Bar(
+                x=kreds_df['Year'],
+                y=kreds_df[y_col],
+                name=kreds_name,
+                text=kreds_df[y_col],
+                marker_color=const_colors[kreds_name],
+                texttemplate=text_format,
+                textposition='inside',
+                visible=True, 
+                hovertemplate=(
+                    f"<b>{kreds_name}</b><br>" +
+                    f"{'Percentage' if show_percentage else 'Count'}: %{{y:.2f}}<extra></extra>")
+            )
+        )
+
+    fig.update_layout(
+        title=dict(
+            text=title,
+            x=0.5, 
+            font=dict(
+                family="Arial",  
+                size=20,         
+                color="black")),
+        barmode='group',
+        uniformtext_minsize=8,
+        uniformtext_mode='hide',
+        hovermode="x unified",
+        plot_bgcolor='rgba(0,0,0,0)',
+        yaxis_title=y_title,
+        xaxis_title="Election Year",
+        font=dict(
+            family="Arial",
+            size=12, 
+            color="black"),
+        legend=dict(
+            title_font_family="Arial",
+            font=dict(size=12),
+            bordercolor="Black",
+            borderwidth=1,
+            orientation="v",  
+            traceorder="normal")
+    )
+
+    fig.update_xaxes(showline=True, linewidth=1, linecolor='lightgrey',
+                     showgrid=True, gridwidth=1, gridcolor='lightgrey')
+    
+    fig.update_yaxes(
+        showline=True, linewidth=1, linecolor='lightgrey',
+        showgrid=True, gridwidth=1, gridcolor='lightgrey',
+        range=[0, 100] if show_percentage else None)
+    
+
+    fig.write_html(html)
+    fig.show()
+
+
+
+def plot_stacked_bar_dist(years, counts, legend, values, html, color_map=None, show_percentage=False, title=""):
+    # Create the DataFrame
+    df = pd.DataFrame({'Year': years, f'{legend}': counts, 'Value': values})
+    # Convert to strings to ensure categorical x-axis
+    df['Year'] = df['Year'].astype(str)
+    df[f'{legend}'] = df[f'{legend}'].astype(str)
+
+    # Compute percentage if needed
+    if show_percentage:
+        df['Percentage'] = df.groupby('Year')['Value'].transform(lambda x: x / x.sum() * 100)
+        y_col = 'Percentage'
+        text_format = '%{text:.1f}%'
+        y_title = 'Percentage (%)'
+    else:
+        y_col = 'Value'
+        text_format = '%{text:.0f}'
+        y_title = 'Count'
+
+    
+    # Determine if color_map is a list or a dict
+    if isinstance(color_map, list):
+        fig = px.bar(
+            df,
+            x='Year',
+            y=y_col,
+            color=f'{legend}',
+            text=y_col,
+            barmode='stack',
+            color_discrete_sequence=color_map  
+        )
+    else:
+        fig = px.bar(
+            df,
+            x='Year',
+            y=y_col,
+            color=f'{legend}',
+            text=y_col,
+            barmode='stack',
+            color_discrete_map=color_map  
+        )
+        
+    fig.update_traces(
+        texttemplate=text_format,
+        textposition='inside',
+        marker_line_color='lightgrey',
+        marker_line_width=1.5
+    )
+
+    fig.update_layout(
+        title=title,
+        title_x=0.5,
+        uniformtext_minsize=8,
+        uniformtext_mode='hide',
+        hovermode="x unified",
+        plot_bgcolor='rgba(0,0,0,0)',
+        yaxis_title=y_title,
+        xaxis_title="Year"
+    )
+
+    fig.update_xaxes(showline=True, linewidth=1, linecolor='lightgrey',
+                     showgrid=True, gridwidth=1, gridcolor='lightgrey')
+    fig.update_yaxes(showline=True, linewidth=1, linecolor='lightgrey',
+                     showgrid=True, gridwidth=1, gridcolor='lightgrey')
+
+    fig.write_html(html)
+    fig.show()
+
+
+
+
+
+def plot_stacked_line_from_grouped_df(
+    df_grouped,
+    colors,
+    constituency_id_to_name,
+    show_percentage=False,
+    title="",
+    y_axis_title="",
+    group_name="",
+    group_order=[]
+):
+    import pandas as pd
+    import plotly.graph_objects as go
+    import plotly.io as pio
+    pio.renderers.default = "iframe_connected"
+
+    column_names = df_grouped.columns.to_list()
+
+    # Prepare DataFrame
+    df = df_grouped.copy()
+    df['KredsName'] = df['KredsNr'].map(constituency_id_to_name)
+    df['Year'] = df['Year'].astype(str)
+    df['Year'] = pd.Categorical(df['Year'], categories=sorted(df['Year'].unique()), ordered=True)
+
+    # Calculate percentage per year and kreds if needed
+    if show_percentage:
+        df['DisplayValue'] = df.groupby(['KredsName', 'Year'])['Count'].transform(lambda x: x / x.sum() * 100)
+    else:
+        df['DisplayValue'] = df['Count']
+
+    # Define age group order explicitly
+    constituencies = df['KredsName'].dropna().unique()
+
+    fig = go.Figure()
+
+    # Add traces
+    for i, constituency in enumerate(constituencies):
+        for group in group_order:
+            sub = df[(df['KredsName'] == constituency) & (df[column_names[2]] == group)]
+            sub = sub.sort_values('Year')
+
+            fig.add_trace(go.Scatter(
+                x=sub['Year'],
+                y=sub['DisplayValue'],
+                mode='lines',
+                stackgroup='one',
+                name=group,
+                marker=dict(color=const_colors.get(group)),
+                line_shape="linear",
+                visible=(i == 0),
+                hovertemplate=(
+                    f"<b>{group}</b><br>Year: %{{x}}<br>"
+                    f"{'%' if show_percentage else 'Count'}: %{{y:.1f}}<extra></extra>")
+            ))
+
+    # Dropdown buttons
+    buttons = []
+    for i, constituency in enumerate(constituencies):
+        visibility = []
+        for j in range(len(constituencies)):
+            visibility.extend([(j == i)] * len(group_order))
+        buttons.append(dict(
+            label=constituency,
+            method='update',
+            args=[{"visible": visibility},
+                  {"title": f"{title} - {constituency}"}]
+        ))
+
+    # Layout
+    fig.update_layout(
+        updatemenus=[dict(
+            buttons=buttons,
+            direction="down",
+            showactive=True,
+            x=0.0, xanchor="left",
+            y=1.1, yanchor="top"
+        )],
+        title=dict(text=f"{title} - {constituencies[0]}", x=0.5),
+        xaxis_title="Year of Data Collection",
+        yaxis_title=y_axis_title if not show_percentage else "Percentage",
+        xaxis=dict(type='category'),
+        hovermode="x unified",
+        plot_bgcolor='rgba(0,0,0,0)',
+        font=dict(family="Arial", size=12),
+        legend_title_text=group_name,
+        legend=dict(orientation="v", bordercolor="Black", borderwidth=1)
+    )
+
+    fig.update_xaxes(showline=True, linewidth=1, linecolor='lightgrey',
+                     showgrid=True, gridwidth=1, gridcolor='lightgrey')
+    fig.update_yaxes(showline=True, linewidth=1, linecolor='lightgrey',
+                     showgrid=True, gridwidth=1, gridcolor='lightgrey')
+
+    fig.show()
+
