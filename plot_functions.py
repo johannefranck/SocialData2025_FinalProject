@@ -1,48 +1,406 @@
-import os
-import json
-
 import pandas as pd
-import numpy as np
-
 import matplotlib.pyplot as plt
 import seaborn as sns
 import plotly.express as px
 import plotly.graph_objects as go
-import plotly.io as pio
-pio.renderers.default = 'iframe'
-import folium
-import branca.colormap as cm  
-from branca.element import MacroElement, Template
-
-from IPython.display import display, clear_output
-
-# Pandas settings
 pd.set_option('future.no_silent_downcasting', True)
 
 
+# ----------------------------- bar percentage distribution plot  ----------------------------- #
+def plot_bar_dist_perc(values, percentage, html, color, y_axis_title, title):
+    values = [str(v) for v in values]
+    plot_df = pd.DataFrame({'Value': values, 'Percentage': percentage})
+    plot_df['Value'] = pd.Categorical(plot_df['Value'], categories=values, ordered=True)
 
-const_colors = {
-  'Indre By':     '#241B5F',
-  'Østerbro':     '#46237A',
-  'Vesterbro':    '#4A4DE9',
-  'Nørrebro':     '#ABD2FA',
-  'Bispebjerg':   '#FFB400',
-  'Brønshøj':      '#FFC800',
-  'Valby':        '#FFE5B4',
-  'Falkoner':     '#FF5A00',
-  'Slots':         '#FF8427',
-  'Sundbyvester': '#D64161',
-  'Sundbyøster':  '#FF6273',
-  'Tårnby':       '#FF95A1'
-}
+    fig = px.bar(plot_df, x='Value', y='Percentage', text='Percentage')
 
+    fig.update_traces(
+        texttemplate='%{text:.1f}%',
+        textposition='outside',
+        marker_color=color,
+        marker_line_color='black',
+        marker_line_width=1.5,
+        hovertemplate=(
+            "Year: %{x}<br>" +
+            ("Percentage: %{y:.2f}%"  +
+            "<extra></extra>"))
+        )
 
-const_order = ["Indre By", "Østerbro", "Vesterbro", "Nørrebro", "Bispebjerg", "Brønshøj", "Valby", "Falkoner", "Slots", "Sundbyvester", "Sundbyøster", "Tårnby"]
+    fig.update_layout(
+        title=title,
+        title_x=0.5,
+        uniformtext_minsize=8,
+        uniformtext_mode='hide',
+        hovermode="x unified",
+        plot_bgcolor='rgba(0,0,0,0)',
+        yaxis_title=y_axis_title,
+        xaxis_title="Election Year",
+    )
 
+    fig.update_xaxes(showline=True, linewidth=1, linecolor='lightgrey',
+                     showgrid=True, gridwidth=1, gridcolor='lightgrey')
+    fig.update_yaxes(showline=True, linewidth=1, linecolor='lightgrey',
+                     showgrid=True, gridwidth=1, gridcolor='lightgrey')
 
+    fig.write_html(html)
+    fig.show()
 
-def plot_stacked_bar_dist_per_const(years, kreds_ids, counts, legend, values, html, color_map, constituency_id_to_name, show_percentage=False, title="", y_title=""):
-    # Create DataFrame
+# ----------------------------- Stacked-bar plot  ----------------------------- #
+def plot_stacked_bar_dist(years, counts, legend, values, html, color_map, show_percentage, y_axis_title, title):
+    df = pd.DataFrame({'Year': years, f'{legend}': counts, 'Value': values})
+    df['Year'] = df['Year'].astype(str)
+    df[f'{legend}'] = df[f'{legend}'].astype(str)
+
+    if show_percentage:
+        df['Percentage'] = df.groupby('Year')['Value'].transform(lambda x: x / x.sum() * 100)
+        y_col = 'Percentage'
+        text_format = '%{text:.1f}%'
+    else:
+        y_col = 'Value'
+        text_format = '%{text:.0f}'
+
+    if isinstance(color_map, list):
+        fig = px.bar(
+            df,
+            x='Year',
+            y=y_col,
+            color=f'{legend}',
+            text=y_col,
+            barmode='stack',
+            color_discrete_sequence=color_map  
+        )
+    else:
+        fig = px.bar(
+            df,
+            x='Year',
+            y=y_col,
+            color=f'{legend}',
+            text=y_col,
+            barmode='stack',
+            color_discrete_map=color_map  
+        )
+        
+    fig.update_traces(
+        texttemplate=text_format,
+        textposition='inside',
+        marker_line_color='lightgrey',
+        marker_line_width=1.5, 
+        hovertemplate=(
+            "Year: %{x}<br>" +
+            ("Percentage: %{y:.2f}%" if show_percentage else "Count: %{y:.0f}") +
+            "<extra></extra>")
+        )
+
+    fig.update_layout(
+        title=title,
+        title_x=0.5,
+        uniformtext_minsize=8,
+        uniformtext_mode='hide',
+        hovermode="x unified",
+        plot_bgcolor='rgba(0,0,0,0)',
+        yaxis_title=y_axis_title,
+        xaxis_title="Election Year"
+    )
+
+    fig.update_xaxes(showline=True, linewidth=1, linecolor='lightgrey',
+                     showgrid=True, gridwidth=1, gridcolor='lightgrey')
+    fig.update_yaxes(showline=True, linewidth=1, linecolor='lightgrey',
+                     showgrid=True, gridwidth=1, gridcolor='lightgrey')
+
+    fig.write_html(html)
+    fig.show()
+
+# ----------------------------- Pyramid population plot  ----------------------------- #
+def plot_population_pyramids(
+    df, 
+    age_col='Age', 
+    gender_col='Gender', 
+    year_col='Year', 
+    count_col='Count', 
+    genders=('Men', 'Women'), 
+    colors=('blue', 'red'), 
+    max_years=6, 
+    suptitle="Population Pyramids by Year"
+):
+    # Set seaborn style
+    sns.set_theme(style="whitegrid")
+
+    # Clean age column
+    df = df.copy()
+    df[age_col] = df[age_col].str.replace('år', '').str.strip()
+    age_order = df[age_col].unique()
+
+    # Filter gender and age
+    df_filtered = df[
+        df[gender_col].isin(genders) & 
+        df[age_col].isin(age_order)
+    ]
+
+    # Get colors
+    color_m, color_k = colors
+
+    # Setup subplots
+    years = sorted(df_filtered[year_col].unique())[:max_years]
+    n_cols = 2
+    n_rows = (len(years) + 1) // 2
+    fig, axs = plt.subplots(nrows=n_rows, ncols=n_cols, figsize=(9 * n_cols, 5.5 * n_rows))
+    axs = axs.flatten()
+
+    # Global max for x-axis scaling
+    max_count = 0
+    for year in years:
+        df_year = df_filtered[df_filtered[year_col] == year]
+        pivot = df_year.groupby([age_col, gender_col])[count_col].sum().unstack().fillna(0)
+        max_count = max(max_count, pivot.values.max())
+
+    # Plot pyramids
+    for i, year in enumerate(years):
+        ax = axs[i]
+        df_year = df_filtered[df_filtered[year_col] == year]
+        pop = df_year.groupby([age_col, gender_col])[count_col].sum().unstack().fillna(0)
+        pop = pop.loc[age_order]
+
+        ax.barh(pop.index, -pop.get(genders[0], 0), color=color_m, label=genders[0])
+        ax.barh(pop.index, pop.get(genders[1], 0), color=color_k, label=genders[1])
+
+        ax.set_title(f"{year}", fontsize=14)
+        ax.set_ylabel('Age Group')
+        ax.set_xlabel('Population')
+        ax.set_xlim(-max_count, max_count)
+        ax.set_xticks(ax.get_xticks())
+        ax.set_xticklabels([f"{int(abs(label))}" for label in ax.get_xticks()])
+
+        ax.legend(loc='upper left', bbox_to_anchor=(0, 1), frameon=False)
+        ax.spines[['right', 'top']].set_visible(False)
+        ax.tick_params(axis='x', labelsize=10)
+        ax.tick_params(axis='y', labelsize=10)
+
+    for j in range(i + 1, len(axs)):
+        axs[j].axis('off')
+
+    plt.suptitle(suptitle, fontsize=15)
+    plt.tight_layout()
+    plt.subplots_adjust(top=0.93)
+    plt.show()
+
+# ----------------------------- Line plot by year  ----------------------------- #
+def line_plot_by_year(df, x, y, cat, title, x_title, y_title, color_map, html): 
+    # Sort by your desired district order
+    district_order = list(color_map.keys())
+    df[cat] = pd.Categorical(df[cat], categories=district_order, ordered=True)
+    df = df.sort_values([cat, x])
+
+    # Initialize figure
+    fig = go.Figure()
+
+    # Add each district as a separate trace
+    for kreds_name in district_order:
+        kreds_df = df[df['KredsNr'] == kreds_name]
+
+        fig.add_trace(
+            go.Scatter(
+                x=kreds_df[x],
+                y=kreds_df[y],
+                mode='lines+markers',
+                name=kreds_name,
+                marker=dict(color=color_map[kreds_name]),
+                line=dict(color=color_map[kreds_name]),
+                hovertemplate=(
+                    f"<b>{kreds_name}</b><br>" +
+                    "Population Count = %{y}<extra></extra>"
+                )
+            )
+        )
+
+    # Update layout
+    fig.update_layout(
+        title=dict(
+            text=title,
+            x=0.5, 
+            font=dict(
+                family="Arial",  
+                size=20,         
+                color="black")),
+        font=dict(
+                family="Arial",
+                size=12, 
+                color="black"),
+        legend=dict(
+                title_font_family="Arial",
+                font=dict(size=12),
+                orientation="v",  
+                traceorder="normal"),
+        xaxis_title=x_title, 
+        yaxis_title=y_title,
+        template='plotly',
+        hovermode="x unified",
+    )
+
+    fig.write_html(html)
+    fig.show()
+    
+# ----------------------------- Grouped percentage bar plot  ----------------------------- #   
+def plot_grouped_percentage_bar(
+    df,
+    x_col,
+    y_col,
+    group_col,
+    color_sequence,
+    html,
+    category_order=None,
+    title="",
+    y_axis_title="Share of population (%)",
+    x_axis_title="Year",
+):
+    fig = px.bar(
+        df,
+        x=x_col,
+        y=y_col,
+        color=group_col,
+        color_discrete_sequence=color_sequence,
+        barmode='group',
+        category_orders={group_col: category_order} if category_order else None,
+        text=y_col
+    )
+
+    # Text formatting and hover
+    fig.update_traces(
+        texttemplate='%{text:.1f}%',
+        textposition='inside',
+        hovertemplate="<b>%{fullData.name}</b><br>" +
+                      f"{x_axis_title} = %{{x}}<br>" +
+                      f"{y_axis_title}: %{{y:.2f}}%<extra></extra>"
+    )
+
+    # Layout styling
+    fig.update_layout(
+        title=dict(
+            text=title,
+            x=0.5,
+            font=dict(family="Arial", size=20, color="black")
+        ),
+        font=dict(family="Arial", size=12, color="black"),
+        barmode='group',
+        uniformtext_minsize=8,
+        uniformtext_mode='hide',
+        hovermode="x unified",
+        plot_bgcolor='rgba(0,0,0,0)',
+        yaxis_title=y_axis_title,
+        xaxis_title=x_axis_title,
+        legend=dict(
+            title_text=None,
+            title_font_family="Arial",
+            font=dict(size=12),
+            orientation="v",
+            traceorder="normal"
+        ),
+        xaxis=dict(
+            categoryorder='array',
+            categoryarray=sorted(df[x_col].unique()),
+            showline=True,
+            linewidth=1,
+            linecolor='lightgrey',
+            showgrid=True,
+            gridwidth=1,
+            gridcolor='lightgrey'
+        ),
+        yaxis=dict(
+            showline=True,
+            linewidth=1,
+            linecolor='lightgrey',
+            showgrid=True,
+            gridwidth=1,
+            gridcolor='lightgrey'
+        )
+    )
+    fig.write_html(html)
+    fig.show()
+
+# ----------------------------- Bar plot per constituency  ----------------------------- #
+def plot_bar_dist_per_const_multi(years, kreds_ids, values, html, const_colors, constituency_id_to_name, show_percentage=False, title="", y_axis_title=""):
+    # Create the DataFrame
+    df = pd.DataFrame({
+        'Year': [str(y) for y in years],
+        'KredsNr': kreds_ids,
+        'Value': values})
+
+    # Map KredsNr to name
+    df['KredsName'] = df['KredsNr'].map(constituency_id_to_name)
+
+    df['Percentage'] = df['Value'] * 100
+    y_col = 'Percentage'
+    text_format = '%{text:.1f}%'
+    y_title = y_axis_title
+
+    # Create traces for each Kreds
+    kreds_list = []
+    for kreds_name in const_colors.keys():
+        kreds_nr = df[df['KredsName'] == kreds_name]['KredsNr'].iloc[0]
+        kreds_list.append((kreds_nr, kreds_name))
+
+    fig = go.Figure()
+
+    for kreds_nr, kreds_name in kreds_list:
+        kreds_df = df[df['KredsName'] == kreds_name]
+
+        fig.add_trace(
+            go.Bar(
+                x=kreds_df['Year'],
+                y=kreds_df[y_col],
+                name=kreds_name,
+                text=kreds_df[y_col],
+                marker_color=const_colors[kreds_name],
+                texttemplate=text_format,
+                textposition='inside',
+                visible=True, 
+                hovertemplate=(
+                    f"<b>{kreds_name}</b><br>" +
+                    f"{'Percentage' if show_percentage else 'Count'}: %{{y:.2f}}<extra></extra>")
+            )
+        )
+
+    fig.update_layout(
+        title=dict(
+            text=title,
+            x=0.5, 
+            font=dict(
+                family="Arial",  
+                size=20,         
+                color="black")),
+        barmode='group',
+        uniformtext_minsize=8,
+        uniformtext_mode='hide',
+        hovermode="x unified",
+        plot_bgcolor='rgba(0,0,0,0)',
+        yaxis_title=y_title,
+        xaxis_title="Election Year",
+        font=dict(
+            family="Arial",
+            size=12, 
+            color="black"),
+        legend=dict(
+            title_font_family="Arial",
+            font=dict(size=12),
+            bordercolor="Black",
+            borderwidth=1,
+            orientation="v",  
+            traceorder="normal")
+    )
+
+    fig.update_xaxes(showline=True, linewidth=1, linecolor='lightgrey',
+                     showgrid=True, gridwidth=1, gridcolor='lightgrey')
+    
+    fig.update_yaxes(
+        showline=True, linewidth=1, linecolor='lightgrey',
+        showgrid=True, gridwidth=1, gridcolor='lightgrey',
+        range=[0, 100] if show_percentage else None)
+    
+
+    fig.write_html(html)
+    fig.show()
+
+# ----------------------------- Stacked bar plot per constituency  ----------------------------- #
+def plot_stacked_bar_dist_per_const(years, kreds_ids, counts, legend, values, html, color_map, const_order, constituency_id_to_name, show_percentage=False, title="", y_title=""):
     df = pd.DataFrame({
         'Year': years,
         'KredsNr': kreds_ids,
@@ -69,12 +427,11 @@ def plot_stacked_bar_dist_per_const(years, kreds_ids, counts, legend, values, ht
 
     # Get sorted list of (KredsNr, KredsName)
     kreds_list = []
-    for kreds_name in const_colors.keys():
-        kreds_nr = df[df['KredsName'] == kreds_name]['KredsNr'].iloc[0]
-        kreds_list.append((kreds_nr, kreds_name))
+    for kreds_name in const_order:
+            kreds_nr = df[df['KredsName'] == kreds_name]['KredsNr'].iloc[0]
+            kreds_list.append((kreds_nr, kreds_name))
 
     fig = go.Figure()
-
     # Category list : parties 
     all_categories = sorted(df[legend].unique())
 
@@ -173,160 +530,25 @@ def plot_stacked_bar_dist_per_const(years, kreds_ids, counts, legend, values, ht
     fig.show()
 
 
-def plot_bar_dist_per_const_multi(years, kreds_ids, values, html, const_colors, constituency_id_to_name, df_turnout_ratio, show_percentage=False, title="", y_axis_title=""):
-    # Create the DataFrame
-    df = pd.DataFrame({
-        'Year': [str(y) for y in years],
-        'KredsNr': kreds_ids,
-        'Value': values})
-
-    # Map KredsNr to name
-    df['KredsName'] = df['KredsNr'].map(constituency_id_to_name)
-
-    df['Percentage'] = df['Value'] * 100
-    y_col = 'Percentage'
-    text_format = '%{text:.1f}%'
-    y_title = y_axis_title
-
-    # Create traces for each Kreds
-    kreds_list = []
-    for kreds_name in const_order:
-        kreds_nr = df[df['KredsName'] == kreds_name]['KredsNr'].iloc[0]
-        kreds_list.append((kreds_nr, kreds_name))
-
-    fig = go.Figure()
-
-    for kreds_nr, kreds_name in kreds_list:
-        kreds_df = df[df['KredsName'] == kreds_name]
-
-        fig.add_trace(
-            go.Bar(
-                x=kreds_df['Year'],
-                y=kreds_df[y_col],
-                name=kreds_name,
-                text=kreds_df[y_col],
-                marker_color=const_colors[kreds_name],
-                texttemplate=text_format,
-                textposition='inside',
-                visible=True, 
-                hovertemplate=(
-                    f"<b>{kreds_name}</b><br>" +
-                    f"{'Percentage' if show_percentage else 'Count'}: %{{y:.2f}}<extra></extra>")
-            )
-        )
-
-    fig.update_layout(
-        title=dict(
-            text=title,
-            x=0.5, 
-            font=dict(
-                family="Arial",  
-                size=20,         
-                color="black")),
-        barmode='group',
-        uniformtext_minsize=8,
-        uniformtext_mode='hide',
-        hovermode="x unified",
-        plot_bgcolor='rgba(0,0,0,0)',
-        yaxis_title=y_title,
-        xaxis_title="Election Year",
-        font=dict(
-            family="Arial",
-            size=12, 
-            color="black"),
-        legend=dict(
-            title_font_family="Arial",
-            font=dict(size=12),
-            bordercolor="Black",
-            borderwidth=1,
-            orientation="v",  
-            traceorder="normal")
-    )
-
-    fig.update_xaxes(showline=True, linewidth=1, linecolor='lightgrey',
-                     showgrid=True, gridwidth=1, gridcolor='lightgrey')
-    
-    fig.update_yaxes(
-        showline=True, linewidth=1, linecolor='lightgrey',
-        showgrid=True, gridwidth=1, gridcolor='lightgrey',
-        range=[0, 100] if show_percentage else None)
-    
-
-    fig.write_html(html)
-    fig.show()
+# ----------------------------- Trend line plot per constituency  ----------------------------- #
+##### NB! I skal ændre denne funktion til at bruge keys af const_colors til at få order også skal den have den som input, se de andre funktioner 
 
 
+const_colors = {
+  'Indre By':     '#241B5F',
+  'Østerbro':     '#46237A',
+  'Vesterbro':    '#4A4DE9',
+  'Nørrebro':     '#ABD2FA',
+  'Bispebjerg':   '#FFB400',
+  'Brønshøj':      '#FFC800',
+  'Valby':        '#FFE5B4',
+  'Falkoner':     '#FF5A00',
+  'Slots':         '#FF8427',
+  'Sundbyvester': '#D64161',
+  'Sundbyøster':  '#FF6273',
+  'Tårnby':       '#FF95A1'}
 
-def plot_stacked_bar_dist(years, counts, legend, values, html, color_map=None, show_percentage=False, title=""):
-    # Create the DataFrame
-    df = pd.DataFrame({'Year': years, f'{legend}': counts, 'Value': values})
-    # Convert to strings to ensure categorical x-axis
-    df['Year'] = df['Year'].astype(str)
-    df[f'{legend}'] = df[f'{legend}'].astype(str)
-
-    # Compute percentage if needed
-    if show_percentage:
-        df['Percentage'] = df.groupby('Year')['Value'].transform(lambda x: x / x.sum() * 100)
-        y_col = 'Percentage'
-        text_format = '%{text:.1f}%'
-        y_title = 'Percentage (%)'
-    else:
-        y_col = 'Value'
-        text_format = '%{text:.0f}'
-        y_title = 'Count'
-
-    
-    # Determine if color_map is a list or a dict
-    if isinstance(color_map, list):
-        fig = px.bar(
-            df,
-            x='Year',
-            y=y_col,
-            color=f'{legend}',
-            text=y_col,
-            barmode='stack',
-            color_discrete_sequence=color_map  
-        )
-    else:
-        fig = px.bar(
-            df,
-            x='Year',
-            y=y_col,
-            color=f'{legend}',
-            text=y_col,
-            barmode='stack',
-            color_discrete_map=color_map  
-        )
-        
-    fig.update_traces(
-        texttemplate=text_format,
-        textposition='inside',
-        marker_line_color='lightgrey',
-        marker_line_width=1.5
-    )
-
-    fig.update_layout(
-        title=title,
-        title_x=0.5,
-        uniformtext_minsize=8,
-        uniformtext_mode='hide',
-        hovermode="x unified",
-        plot_bgcolor='rgba(0,0,0,0)',
-        yaxis_title=y_title,
-        xaxis_title="Year"
-    )
-
-    fig.update_xaxes(showline=True, linewidth=1, linecolor='lightgrey',
-                     showgrid=True, gridwidth=1, gridcolor='lightgrey')
-    fig.update_yaxes(showline=True, linewidth=1, linecolor='lightgrey',
-                     showgrid=True, gridwidth=1, gridcolor='lightgrey')
-
-    fig.write_html(html)
-    fig.show()
-
-
-
-
+const_order = ["Indre By", "Østerbro", "Vesterbro", "Nørrebro", "Bispebjerg", "Brønshøj", "Valby", "Falkoner", "Slots", "Sundbyvester", "Sundbyøster", "Tårnby"]
 
 def plot_stacked_line_from_grouped_df(
     df_grouped,
@@ -338,10 +560,6 @@ def plot_stacked_line_from_grouped_df(
     group_name="",
     group_order=[]
 ):
-    import pandas as pd
-    import plotly.graph_objects as go
-    import plotly.io as pio
-    pio.renderers.default = "iframe_connected"
 
     column_names = df_grouped.columns.to_list()
 
