@@ -792,7 +792,59 @@ def plot_stacked_line_from_grouped_df(
     fig.show()
 
 
-# ----------------------------- Support layerede plot per constituency  ----------------------------- #
+
+# ----------------------------- Static income support districtwise  ----------------------------- #
+def plot_static_support_by_district(grouped, const_order, expanded_theme_colors, exclude_no_benefits=True):
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+
+    if exclude_no_benefits:
+        grouped = grouped[grouped['SupportType'] != 'No Received Benefits']
+
+    support_types = grouped['SupportType'].unique()
+    support_color_indices = [8, 10, 7, 6, 1, 4, 13, 0]
+    support_colors = [expanded_theme_colors[i] for i in support_color_indices]
+    palette = dict(zip(support_types, support_colors))
+
+    std_by_district = (
+        grouped.groupby(['District', 'SupportType'])['Percentage']
+        .std()
+        .groupby('District')
+        .mean()
+        .to_dict()
+    )
+
+    districts = [d for d in const_order if d in grouped['District'].unique()]
+    sns.set_theme(style="whitegrid", font="Arial")
+    fig, axes = plt.subplots(4, 3, figsize=(16, 12), sharey=True)
+    axes = axes.flatten()
+
+    for idx, district in enumerate(districts):
+        ax = axes[idx]
+        df_d = grouped[grouped['District'] == district]
+        sns.barplot(
+            data=df_d, x='Year', y='Percentage', hue='SupportType',
+            order=sorted(df_d['Year'].unique()), hue_order=support_types,
+            errorbar=None, palette=palette, ax=ax
+        )
+        std = std_by_district.get(district, 0)
+        ax.set_title(f"{district} (σ = {std:.2f})", fontsize=20, fontname='Arial')
+        ax.set_xlabel('')
+        ax.set_ylabel('Share of Population (%)', fontsize=12)
+        ax.tick_params(labelsize=12)
+        ax.legend_.remove()
+
+    fig.suptitle('Support Type per District (2009-2019)', fontsize=20, fontname='Arial')
+    plt.tight_layout(rect=[0, 0, 1, 0.96])
+    plt.legend(title='Support Type', bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=12, title_fontsize=12)
+    plt.show()
+
+
+
+
+
+
+# ----------------------------- Support income layerede bar plot per district  ----------------------------- #
 from bokeh.plotting import figure, show
 from bokeh.models import ColumnDataSource, Title, Legend
 from bokeh.io import output_file, save
@@ -834,7 +886,7 @@ def plot_support_by_district(df_grouped, const_order, expanded_theme_colors, htm
     # Create Bokeh figure
     p = figure(
         x_range=const_order,
-        title="Support Type Share by District",
+        title="Income Support Type by District",
         width=900, height=600,
         toolbar_location="right",
         tools="pan,box_zoom,reset,save"
@@ -845,14 +897,16 @@ def plot_support_by_district(df_grouped, const_order, expanded_theme_colors, htm
         text_font="Arial",
         text_font_size="12pt",
         text_color="#444444",
-        text_font_style="normal"
+        text_font_style="normal",
+        align="center"
     )
     p.add_layout(subtitle, 'above')
 
     # Fonts
     p.title.text_font = "Arial"
-    p.title.text_font_size = "20pt"
+    p.title.text_font_size = "16pt"
     p.title.text_font_style = "normal"
+    p.title.align = "center"
 
     p.xaxis.axis_label_text_font = "Arial"
     p.xaxis.axis_label_text_font_size = "12pt"
@@ -907,3 +961,118 @@ def plot_support_by_district(df_grouped, const_order, expanded_theme_colors, htm
 
     # Always show in notebook
     show(p)
+
+
+
+# ----------------------------- Income per Household stacked bars per constituency  ----------------------------- #
+import plotly.graph_objects as go
+import pandas as pd
+
+def plot_stacked_bar_income_by_district(
+    df_grouped,
+    colors,
+    constituency_id_to_name,
+    title="Income per Household by District (2009–2019)",
+    y_axis_title="Share of Households (%)",
+    group_name="Income Interval",
+    group_order=[],
+    html=""
+):
+
+
+    df = df_grouped.copy()
+    df['District'] = df['KredsNr'].map(constituency_id_to_name)
+    df['Year'] = df['Year'].astype(str)
+    df['Year'] = pd.Categorical(df['Year'], categories=sorted(df['Year'].unique()), ordered=True)
+
+    if 'Percentage' not in df.columns:
+        df['Percentage'] = df.groupby(['District', 'Year'], observed=True)['Count'].transform(lambda x: x / x.sum() * 100)
+
+    districts = df['District'].dropna().unique()
+    fig = go.Figure()
+
+    # Add traces: always set showlegend=True to keep the legend box
+    for i, district in enumerate(districts):
+        for group in group_order:
+            sub = df[(df['District'] == district) & (df['IncomeMetric'] == group)].sort_values('Year')
+            fig.add_trace(go.Bar(
+                x=sub['Year'],
+                y=sub['Percentage'],
+                name=group,
+                legendgroup=group,
+                showlegend=True,  # <-- Always show legend
+                marker_color=colors.get(group),
+                visible=(i == 0),
+                hovertemplate=f"<b>{group}</b><br>Year: %{{x}}<br>Share: %{{y:.1f}}%<extra></extra>"
+            ))
+
+    # Dropdown buttons
+    buttons = []
+    for i, district in enumerate(districts):
+        visibility = []
+        for j in range(len(districts)):
+            visibility.extend([(j == i)] * len(group_order))
+        buttons.append(dict(
+            label=district,
+            method='update',
+            args=[
+                {"visible": visibility},
+                {"title.text": f"{title} – {district}"}
+            ]
+        ))
+
+    # Layout update
+    fig.update_layout(
+        width=900,
+        height=500,
+        barmode='stack',
+        updatemenus=[dict(
+            type="dropdown",
+            buttons=buttons,
+            direction="down",
+            showactive=True,
+            x=1.02,
+            xanchor="left",
+            y=1.22,  # lifted up a bit
+            yanchor="top",
+            font=dict(size=12),
+            bgcolor="white",
+            bordercolor="black",
+            borderwidth=0.5
+        )],
+        title=dict(
+            text=f"{title} – {districts[0]}",
+            x=0.5,
+            font=dict(size=20, family="Arial", color="black")
+        ),
+
+        xaxis_title="Year",
+        yaxis_title=y_axis_title,
+        font=dict(family="Arial", size=12),
+        plot_bgcolor='rgba(0,0,0,0)',
+        hovermode="x unified",
+        legend_title_text=group_name,
+        legend=dict(
+            orientation="v",
+            yanchor="top",
+            y=1,
+            x=1.02,
+            xanchor="left",
+            borderwidth=0
+        )
+    )
+
+    # Axis styling
+    fig.update_xaxes(
+        type='category',
+        showline=True, linewidth=1, linecolor='lightgrey',
+        showgrid=True, gridwidth=1, gridcolor='lightgrey'
+    )
+    fig.update_yaxes(
+        showline=True, linewidth=1, linecolor='lightgrey',
+        showgrid=True, gridwidth=1, gridcolor='lightgrey'
+    )
+
+    if html:
+        fig.write_html(html)
+    fig.show()
