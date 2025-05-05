@@ -529,6 +529,157 @@ def plot_stacked_bar_dist_per_const(years, kreds_ids, counts, legend, values, ht
     fig.write_html(html)
     fig.show()
 
+# ------------------------------ Line plot per party over time  ----------------------------- #
+def plot_party_vote_share_over_time(df, party_colors, output_path):
+    years = sorted(df['Year'].unique())
+
+    fig = px.line(
+        df,
+        x='Year',
+        y='VoteShare',
+        color='Partyname',
+        markers=True,
+        title='Vote Share per Party Over Time (2005-2022)',
+        labels={'VoteShare': 'Vote Share (%)', 'Year': 'Election Year'},
+        color_discrete_map=party_colors
+    )
+
+    fig.update_xaxes(
+        tickmode='array',
+        tickvals=years,
+        ticktext=[str(y) for y in years]
+    )
+
+    fig.update_layout(
+        title=dict(
+            text='Vote Share by Party Over Time (2005-2022)',
+            x=0.5,
+            font=dict(family="Arial", size=20, color="black")
+        ),
+        font=dict(family="Arial", size=12, color="black"),
+        yaxis_tickformat='.0%',
+        hovermode='x unified',
+        legend_title_text='Party',
+        legend=dict(
+            title_font_family="Arial",
+            font=dict(size=12),
+            orientation="v",
+            traceorder="normal"
+        )
+    )
+
+    fig.update_traces(
+        hovertemplate='%{fullData.name}: %{y:.1%}<extra></extra>'
+    )
+
+    fig.write_html(output_path)
+    fig.show()
+
+# ----------------------------- Dropdown plot per constituency  ----------------------------- #    
+def plot_party_vote_share_dropdown(
+    df,
+    party_colors,
+    constituency_name_to_id,
+    const_order,
+    output_path="html_plots/party_vote_share_const_dropdown.html"
+):
+    df = df.copy()
+    df['Year'] = df['Year'].astype(str)
+
+    const_names = const_order
+    const_idxs = [constituency_name_to_id[name] for name in const_names]
+
+    # Sort parties by first appearance year
+    parties_sorted = (
+        df[df['Votes (%)'] > 0]
+        .groupby('Partyname')['Year']
+        .min()
+        .astype(int)
+        .sort_values()
+    )
+    parties = parties_sorted.index.tolist()
+
+    fig = go.Figure()
+    n_parties = len(parties)
+
+    # Add bar traces for each constituency and party
+    for c_idx, (const_id, cname) in enumerate(zip(const_idxs, const_names)):
+        sub = df[df['KredsNr'] == const_id]
+        for party in parties:
+            tmp = (
+                sub[sub['Partyname'] == party]
+                .pivot(index='Year', columns='Partyname', values='Votes (%)')
+                .fillna(0)
+                .reset_index()
+            )
+
+            fig.add_trace(
+                go.Bar(
+                    x=tmp['Year'],
+                    y=tmp[party],
+                    name=party,
+                    marker_color=party_colors.get(party, "#333333"),
+                    visible=(c_idx == 0),
+                    offsetgroup=party,
+                    legendgroup=party,
+                    text=tmp[party].round(1),
+                    textposition="inside",
+                    textfont=dict(color="white", size=12),
+                    hovertemplate=(
+                        f"<b>{cname}</b><br>"
+                        "Year: %{x}<br>"
+                        f"Party: {party}<br>"
+                        "Vote share: %{y:.1f}%<extra></extra>"
+                    )
+                )
+            )
+
+    # Create dropdown buttons for constituencies
+    buttons = []
+    for c_idx, cname in enumerate(const_names):
+        vis = (
+            [False] * n_parties * c_idx +
+            [True] * n_parties +
+            [False] * n_parties * (len(const_names) - c_idx - 1)
+        )
+        buttons.append(
+            dict(
+                label=cname,
+                method="update",
+                args=[
+                    {"visible": vis},
+                    {"title.text": f"Party Vote Shares Across Elections in {cname}"}
+                ]
+            )
+        )
+
+    # Layout settings
+    fig.update_layout(
+        title=dict(
+            text=f"Party Vote Shares Across Elections in {const_names[0]}",
+            x=0.5,
+            xanchor="center"
+        ),
+        xaxis_title="Election Year",
+        yaxis_title="Vote Share (%)",
+        barmode="group",
+        bargap=0.15,
+        bargroupgap=0.04,
+        font=dict(family="Arial"),
+        updatemenus=[dict(
+            buttons=buttons,
+            direction="down",
+            x=1.02, xanchor="left",
+            y=1.2, yanchor="top",
+            showactive=True
+        )],
+        legend=dict(title="Party", font_size=12),
+        margin=dict(l=40, r=20, t=50, b=40)
+    )
+
+    fig.write_html(output_path)
+    fig.show()
+
 
 # ----------------------------- Trend line plot per constituency  ----------------------------- #
 ##### NB! I skal ændre denne funktion til at bruge keys af const_colors til at få order også skal den have den som input, se de andre funktioner 
