@@ -249,7 +249,7 @@ def plot_grouped_percentage_bar(
     html,
     category_order=None,
     title="",
-    y_axis_title="Share of population (%)",
+    y_axis_title="Share of Households (%)",
     x_axis_title="Year",
 ):
     fig = px.bar(
@@ -640,3 +640,119 @@ def plot_stacked_line_from_grouped_df(
 
     fig.show()
 
+
+# ----------------------------- Support layerede plot per constituency  ----------------------------- #
+from bokeh.plotting import figure, show
+from bokeh.models import ColumnDataSource, Title, Legend
+from bokeh.io import output_file, save
+from math import pi
+
+def plot_support_by_district(df_grouped, const_order, expanded_theme_colors, html=None):
+    # Compute the mean percentage over all years for each District + SupportType
+    df_support_mean = (
+        df_grouped
+        .groupby(["District", "SupportType"], observed=True)["Percentage"]
+        .mean()
+        .reset_index()
+    )
+
+    # Ensure only relevant districts and correct order
+    df_support_mean = df_support_mean[df_support_mean["District"].isin(const_order)]
+    df_support_mean["District"] = pd.Categorical(df_support_mean["District"], categories=const_order, ordered=True)
+
+    # Pivot to wide format for plotting
+    df_ratio = df_support_mean.pivot(index="District", columns="SupportType", values="Percentage").reset_index()
+    df_ratio = df_ratio.sort_values("District")
+
+    # Support types and matching color indices
+    support_types_layered_order = [
+        "State Pension",
+        "Unemployment Benefits",
+        "Social Assistance (Cash Benefits)",
+        "Health / Disability Support",
+        "Parental Leave Benefits",
+        "Disability Pension",
+        "Early Retirement Pension",
+        "Activation Programs"
+    ]
+    support_color_indices = [13, 0, 4, 6, 1, 10, 3, 8]
+    support_colors_ordered = [expanded_theme_colors[i] for i in support_color_indices]
+
+    source = ColumnDataSource(df_ratio)
+
+    # Create Bokeh figure
+    p = figure(
+        x_range=const_order,
+        title="Support Type Share by District",
+        width=900, height=600,
+        toolbar_location="right",
+        tools="pan,box_zoom,reset,save"
+    )
+
+    subtitle = Title(
+        text="Mean over years [2009,2014,2019]",
+        text_font="Arial",
+        text_font_size="12pt",
+        text_color="#444444",
+        text_font_style="normal"
+    )
+    p.add_layout(subtitle, 'above')
+
+    # Fonts
+    p.title.text_font = "Arial"
+    p.title.text_font_size = "20pt"
+    p.title.text_font_style = "normal"
+
+    p.xaxis.axis_label_text_font = "Arial"
+    p.xaxis.axis_label_text_font_size = "12pt"
+    p.xaxis.axis_label_text_font_style = "normal"
+    p.xaxis.major_label_text_font = "Arial"
+    p.xaxis.major_label_text_font_size = "12pt"
+    p.xaxis.major_label_text_font_style = "normal"
+
+    p.yaxis.axis_label_text_font = "Arial"
+    p.yaxis.axis_label_text_font_size = "12pt"
+    p.yaxis.axis_label_text_font_style = "normal"
+    p.yaxis.major_label_text_font = "Arial"
+    p.yaxis.major_label_text_font_size = "12pt"
+    p.yaxis.major_label_text_font_style = "normal"
+
+    # Add bars (layered)
+    legend_items = []
+    for color, support in zip(support_colors_ordered, support_types_layered_order):
+        r = p.vbar(
+            x="District",
+            top=support,
+            source=source,
+            width=0.7,
+            color=color,
+            alpha=0.9,
+            muted_alpha=0.1
+        )
+        legend_items.append((support, [r]))
+
+    legend = Legend(
+        items=legend_items,
+        location="center",
+        orientation="horizontal",
+        label_text_font="Arial",
+        label_text_font_size="12pt",
+        label_text_font_style="normal",
+        click_policy="hide",
+        spacing=10,
+        ncols=4
+    )
+    p.add_layout(legend, 'below')
+
+    # Axes
+    p.xaxis.major_label_orientation = -pi / 4
+    p.yaxis.axis_label = "Share of Population (%)"
+    p.xaxis.axis_label = "District"
+
+    # Save if path is given
+    if html:
+        output_file(html)
+        save(p)
+
+    # Always show in notebook
+    show(p)
