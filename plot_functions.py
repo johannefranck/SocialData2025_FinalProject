@@ -381,8 +381,6 @@ def plot_bar_dist_per_const_multi(years, kreds_ids, values, html, const_colors, 
         legend=dict(
             title_font_family="Arial",
             font=dict(size=12),
-            bordercolor="Black",
-            borderwidth=1,
             orientation="v",  
             traceorder="normal")
     )
@@ -490,8 +488,6 @@ def plot_stacked_bar_dist_per_const(years, kreds_ids, counts, legend, values, ht
                 active=0,  
                 showactive=True,
                 bgcolor="white",
-                bordercolor="black",
-                borderwidth=0.5,
                 font=dict(size=12),
                 direction="down"
             )
@@ -840,17 +836,13 @@ def plot_static_support_by_district(grouped, const_order, expanded_theme_colors,
     plt.show()
 
 
-
-
-
-
 # ----------------------------- Support income layerede bar plot per district  ----------------------------- #
 from bokeh.plotting import figure, show
 from bokeh.models import ColumnDataSource, Title, Legend
 from bokeh.io import output_file, save
 from math import pi
 
-def plot_support_by_district(df_grouped, const_order, expanded_theme_colors, html=None):
+def plot_support_by_district(df_grouped, const_order, expanded_theme_colors, html=""):
     # Compute the mean percentage over all years for each District + SupportType
     df_support_mean = (
         df_grouped
@@ -888,6 +880,7 @@ def plot_support_by_district(df_grouped, const_order, expanded_theme_colors, htm
         x_range=const_order,
         title="Income Support Type by District",
         width=900, height=600,
+        sizing_mode='stretch_width',
         toolbar_location="right",
         tools="pan,box_zoom,reset,save"
     )
@@ -895,7 +888,7 @@ def plot_support_by_district(df_grouped, const_order, expanded_theme_colors, htm
     subtitle = Title(
         text="Mean over years [2009,2014,2019]",
         text_font="Arial",
-        text_font_size="12pt",
+        text_font_size="12px",
         text_color="#444444",
         text_font_style="normal",
         align="center"
@@ -904,22 +897,22 @@ def plot_support_by_district(df_grouped, const_order, expanded_theme_colors, htm
 
     # Fonts
     p.title.text_font = "Arial"
-    p.title.text_font_size = "16pt"
+    p.title.text_font_size = "20px"
     p.title.text_font_style = "normal"
     p.title.align = "center"
 
     p.xaxis.axis_label_text_font = "Arial"
-    p.xaxis.axis_label_text_font_size = "12pt"
+    p.xaxis.axis_label_text_font_size = "12px"
     p.xaxis.axis_label_text_font_style = "normal"
     p.xaxis.major_label_text_font = "Arial"
-    p.xaxis.major_label_text_font_size = "12pt"
+    p.xaxis.major_label_text_font_size = "12px"
     p.xaxis.major_label_text_font_style = "normal"
 
     p.yaxis.axis_label_text_font = "Arial"
-    p.yaxis.axis_label_text_font_size = "12pt"
+    p.yaxis.axis_label_text_font_size = "12px"
     p.yaxis.axis_label_text_font_style = "normal"
     p.yaxis.major_label_text_font = "Arial"
-    p.yaxis.major_label_text_font_size = "12pt"
+    p.yaxis.major_label_text_font_size = "12px"
     p.yaxis.major_label_text_font_style = "normal"
 
     # Add bars (layered)
@@ -953,21 +946,16 @@ def plot_support_by_district(df_grouped, const_order, expanded_theme_colors, htm
     p.xaxis.major_label_orientation = -pi / 4
     p.yaxis.axis_label = "Share of Population (%)"
     p.xaxis.axis_label = "District"
-
+    
+    # Always show in notebook
+    show(p)
+    
     # Save if path is given
     if html:
         output_file(html)
         save(p)
 
-    # Always show in notebook
-    show(p)
-
-
-
 # ----------------------------- Income per Household stacked bars per constituency  ----------------------------- #
-import plotly.graph_objects as go
-import pandas as pd
-
 def plot_stacked_bar_income_by_district(
     df_grouped,
     colors,
