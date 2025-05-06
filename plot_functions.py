@@ -1046,7 +1046,8 @@ def plot_stacked_bar_income_by_district(
             y=1,
             x=1.02,
             xanchor="left",
-            borderwidth=0
+            borderwidth=0,
+            traceorder="reversed"
         )
     )
 
