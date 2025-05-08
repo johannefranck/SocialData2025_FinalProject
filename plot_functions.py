@@ -934,7 +934,7 @@ def plot_support_by_district(df_grouped, const_order, expanded_theme_colors, htm
         location="center",
         orientation="horizontal",
         label_text_font="Arial",
-        label_text_font_size="12pt",
+        label_text_font_size="12px",
         label_text_font_style="normal",
         click_policy="hide",
         spacing=10,
