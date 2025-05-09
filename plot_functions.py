@@ -238,6 +238,67 @@ def line_plot_by_year(df, x, y, cat, title, x_title, y_title, color_map, html):
 
     fig.write_html(html)
     fig.show()
+
+
+# ----------------------------- Line plot by year, by constituency ----------------------------- # 
+def plot_population_percentage_by_age_and_district(
+    df_grouped,
+    colors,
+    constituency_id_to_name,
+    const_order,
+    y_range=(0, 100),
+    title=""
+):
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+
+    df = df_grouped.copy()
+    df['KredsName'] = df['KredsNr'].map(constituency_id_to_name)
+    df['Percentage'] = df.groupby(['KredsName', 'Year'], observed=True)['Count'].transform(lambda x: x / x.sum() * 100)
+
+    sns.set_theme(style="whitegrid", font="Arial")
+
+    districts = const_order
+    age_groups = sorted(df['Age_decades'].dropna().unique())
+    age_colors = {age: colors[i % len(colors)] for i, age in enumerate(age_groups)}
+
+    fig, axes = plt.subplots(4, 3, figsize=(16, 12), sharex=True, sharey=True)
+    axes = axes.flatten()
+
+    for idx, district in enumerate(districts):
+        ax = axes[idx]
+        df_d = df[df['KredsName'] == district]
+
+        plot = sns.lineplot(
+            data=df_d,
+            x='Year', y='Percentage', hue='Age_decades',
+            hue_order=age_groups,
+            palette=age_colors,
+            marker='o',
+            ax=ax,
+            legend = True
+        )
+
+        ax.set_title(district, fontsize=14, fontname='Arial')
+        ax.set_xlabel('')
+        ax.set_ylabel('Share of Population (%)', fontsize=12)
+        ax.set_ylim(*y_range)
+        ax.tick_params(labelsize=10)
+        
+        legend_handles, legend_labels = ax.get_legend_handles_labels()
+        ax.get_legend().remove()
+
+    fig.suptitle(title, fontsize=20, fontname='Arial')
+    plt.tight_layout(rect=[0, 0, 1, 0.90])
+
+    # Unified legend above all plots
+    fig.legend(
+        legend_handles, legend_labels, title='Age Group',
+        loc='upper center', bbox_to_anchor=(0.5, 0.95),
+        ncol=4, fontsize=11, title_fontsize=12
+    )
+
+    plt.show()
     
 # ----------------------------- Grouped percentage bar plot  ----------------------------- #   
 def plot_grouped_percentage_bar(
@@ -469,12 +530,21 @@ def plot_stacked_bar_dist_per_const(years, kreds_ids, counts, legend, values, ht
         for j in range(num_categories):
             visible[start_idx + j] = True
 
+
+
         buttons.append(dict(
             label=kreds_name,
-            method="update",
+            method='update',
             args=[
                 {"visible": visible},
-                {"title": f"{title}<br>({kreds_name})"}  
+                {
+                    "title": {
+                        "text": f"{title} - {kreds_name}",
+                        "x": 0.5,
+                        "xanchor": "center",
+                        "font": dict(family="Arial", size=20, color="black")  # Keep styling consistent
+                    }
+                }
             ]
         ))
     default = kreds_names_only[0]
@@ -535,7 +605,7 @@ def plot_party_vote_share_over_time(df, party_colors, output_path):
         y='VoteShare',
         color='Partyname',
         markers=True,
-        title='Vote Share per Party Over Time (2005-2022)',
+        title='Vote Share per Party Over Time',
         labels={'VoteShare': 'Vote Share (%)', 'Year': 'Election Year'},
         color_discrete_map=party_colors
     )
@@ -552,6 +622,7 @@ def plot_party_vote_share_over_time(df, party_colors, output_path):
             x=0.5,
             font=dict(family="Arial", size=20, color="black")
         ),
+        
         font=dict(family="Arial", size=12, color="black"),
         yaxis_tickformat='.0%',
         hovermode='x unified',
@@ -638,23 +709,30 @@ def plot_party_vote_share_dropdown(
             [True] * n_parties +
             [False] * n_parties * (len(const_names) - c_idx - 1)
         )
-        buttons.append(
-            dict(
-                label=cname,
-                method="update",
-                args=[
-                    {"visible": vis},
-                    {"title.text": f"Party Vote Shares Across Elections in {cname}"}
-                ]
-            )
-        )
+
+        buttons.append(dict(
+            label=cname,
+            method='update',
+            args=[
+                {"visible": vis},
+                {
+                    "title": {
+                        "text": f"Party Vote Shares Across Elections in {cname}",
+                        "x": 0.5,
+                        "xanchor": "center",
+                        "font": dict(family="Arial", size=20, color="black")  # Keep styling consistent
+                    }
+                }
+            ]
+        ))
 
     # Layout settings
     fig.update_layout(
         title=dict(
             text=f"Party Vote Shares Across Elections in {const_names[0]}",
             x=0.5,
-            xanchor="center"
+            xanchor="center",
+            font=dict(size=20, family="Arial", color="black")
         ),
         xaxis_title="Election Year",
         yaxis_title="Vote Share (%)",
@@ -678,34 +756,17 @@ def plot_party_vote_share_dropdown(
 
 
 # ----------------------------- Trend line plot per constituency  ----------------------------- #
-##### NB! I skal ændre denne funktion til at bruge keys af const_colors til at få order også skal den have den som input, se de andre funktioner 
-
-
-const_colors = {
-  'Indre By':     '#241B5F',
-  'Østerbro':     '#46237A',
-  'Vesterbro':    '#4A4DE9',
-  'Nørrebro':     '#ABD2FA',
-  'Bispebjerg':   '#FFB400',
-  'Brønshøj':      '#FFC800',
-  'Valby':        '#FFE5B4',
-  'Falkoner':     '#FF5A00',
-  'Slots':         '#FF8427',
-  'Sundbyvester': '#D64161',
-  'Sundbyøster':  '#FF6273',
-  'Tårnby':       '#FF95A1'}
-
-const_order = ["Indre By", "Østerbro", "Vesterbro", "Nørrebro", "Bispebjerg", "Brønshøj", "Valby", "Falkoner", "Slots", "Sundbyvester", "Sundbyøster", "Tårnby"]
-
 def plot_stacked_line_from_grouped_df(
     df_grouped,
     colors,
     constituency_id_to_name,
+    const_order,
     show_percentage=False,
     title="",
     y_axis_title="",
     group_name="",
-    group_order=[]
+    group_order=[],
+    html = ""
 ):
 
     column_names = df_grouped.columns.to_list()
@@ -718,12 +779,13 @@ def plot_stacked_line_from_grouped_df(
 
     # Calculate percentage per year and kreds if needed
     if show_percentage:
-        df['DisplayValue'] = df.groupby(['KredsName', 'Year'])['Count'].transform(lambda x: x / x.sum() * 100)
+        df['DisplayValue'] = df.groupby(['KredsName', 'Year'], observed=True)['Count'].transform(lambda x: x / x.sum() * 100)
     else:
         df['DisplayValue'] = df['Count']
 
     # Define age group order explicitly
-    constituencies = df['KredsName'].dropna().unique()
+    constituencies = const_order
+    group_colors = {group: colors[i % len(colors)] for i, group in enumerate(group_order)}
 
     fig = go.Figure()
 
@@ -738,14 +800,18 @@ def plot_stacked_line_from_grouped_df(
                 y=sub['DisplayValue'],
                 mode='lines',
                 stackgroup='one',
-                name=group,
-                marker=dict(color=const_colors.get(group)),
+                name=f"{group}",
+                legendgroup=group,
+                showlegend=True,
+                line=dict(color=group_colors.get(group)),
+                fillcolor=group_colors.get(group),
                 line_shape="linear",
                 visible=(i == 0),
                 hovertemplate=(
                     f"<b>{group}</b><br>Year: %{{x}}<br>"
                     f"{'%' if show_percentage else 'Count'}: %{{y:.1f}}<extra></extra>")
             ))
+
 
     # Dropdown buttons
     buttons = []
@@ -756,37 +822,85 @@ def plot_stacked_line_from_grouped_df(
         buttons.append(dict(
             label=constituency,
             method='update',
-            args=[{"visible": visibility},
-                  {"title": f"{title} - {constituency}"}]
+            args=[
+                {"visible": visibility},
+                {
+                    "title": {
+                        "text": f"{title} - {constituency}",
+                        "x": 0.5,
+                        "xanchor": "center",
+                        "font": dict(family="Arial", size=20, color="black")  # Keep styling consistent
+                    }
+                }
+            ]
         ))
 
     # Layout
     fig.update_layout(
+        width=900,
+        height=500,
         updatemenus=[dict(
+            type="dropdown",
             buttons=buttons,
             direction="down",
             showactive=True,
-            x=0.0, xanchor="left",
-            y=1.1, yanchor="top"
+            x=1.02,
+            xanchor="left",
+            y=1.22,  
+            yanchor="top",
+            font=dict(size=12),
+            bgcolor="white",
         )],
-        title=dict(text=f"{title} - {constituencies[0]}", x=0.5),
-        xaxis_title="Year of Data Collection",
-        yaxis_title=y_axis_title if not show_percentage else "Percentage",
+        title=dict(text=f"{title} - {constituencies[0]}", 
+                   x=0.5, 
+                   font=dict(size=20, family="Arial", color="black")),
+        xaxis_title="Year",
+        yaxis_title=y_axis_title if not show_percentage else "Share of Population (%)",
+        yaxis=dict(
+            tickvals=list(range(0, 110, 10)),  
+            ticksuffix="%" if show_percentage else "",
+        ),
         xaxis=dict(type='category'),
         hovermode="x unified",
         plot_bgcolor='rgba(0,0,0,0)',
         font=dict(family="Arial", size=12),
         legend_title_text=group_name,
-        legend=dict(orientation="v", bordercolor="Black", borderwidth=1)
+        legend=dict(orientation="v", bordercolor='white', borderwidth=1, traceorder="reversed"),
     )
 
-    fig.update_xaxes(showline=True, linewidth=1, linecolor='lightgrey',
-                     showgrid=True, gridwidth=1, gridcolor='lightgrey')
+    if show_percentage:
+        for y in range(0, 110, 10): 
+            fig.add_shape(
+                type="line",
+                x0=0,
+                x1=1,
+                xref='paper',  
+                y0=y,
+                y1=y,
+                line=dict(color="rgba(255,255,255,0.3)", width=1),
+                layer="above"  
+            )
+
+    for trace in fig.data:
+        trace.legendgroup = trace.name
+
+    fig.update_xaxes(
+        type='category',
+        categoryorder='array',
+        categoryarray=sorted(df['Year'].unique()),
+        tickvals=["2004", "2009", "2014", "2019"],
+        ticktext=["         2004", "2009", "2014", "2019         "],  
+        showline=True,
+        linewidth=1,
+        linecolor='lightgrey',
+        showgrid=True,
+        gridwidth=1,
+        gridcolor='lightgrey'
+    )
     fig.update_yaxes(showline=True, linewidth=1, linecolor='lightgrey',
-                     showgrid=True, gridwidth=1, gridcolor='lightgrey')
-
+                    gridwidth=1, gridcolor='lightgrey')
+    fig.write_html(html)
     fig.show()
-
 
 
 # ----------------------------- Static income support districtwise  ----------------------------- #
@@ -830,7 +944,7 @@ def plot_static_support_by_district(grouped, const_order, expanded_theme_colors,
         ax.tick_params(labelsize=12)
         ax.legend_.remove()
 
-    fig.suptitle('Support Type per District (2009-2019)', fontsize=20, fontname='Arial')
+    fig.suptitle('Support Type per District', fontsize=20, fontname='Arial')
     plt.tight_layout(rect=[0, 0, 1, 0.96])
     plt.legend(title='Support Type', bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=12, title_fontsize=12)
     plt.show()
@@ -884,6 +998,10 @@ def plot_support_by_district(df_grouped, const_order, expanded_theme_colors, htm
         toolbar_location="right",
         tools="pan,box_zoom,reset,save"
     )
+
+    p.title.text_font = "Arial"
+    p.title.text_font_size = "20pt"
+    p.title.text_color = "black"
 
     subtitle = Title(
         text="Mean over years [2009,2014,2019]",
@@ -960,7 +1078,8 @@ def plot_stacked_bar_income_by_district(
     df_grouped,
     colors,
     constituency_id_to_name,
-    title="Income per Household by District (2009–2019)",
+    const_order,
+    title="Income per Household by District",
     y_axis_title="Share of Households (%)",
     group_name="Income Interval",
     group_order=[],
@@ -976,7 +1095,7 @@ def plot_stacked_bar_income_by_district(
     if 'Percentage' not in df.columns:
         df['Percentage'] = df.groupby(['District', 'Year'], observed=True)['Count'].transform(lambda x: x / x.sum() * 100)
 
-    districts = df['District'].dropna().unique()
+    districts = const_order
     fig = go.Figure()
 
     # Add traces: always set showlegend=True to keep the legend box
@@ -988,8 +1107,11 @@ def plot_stacked_bar_income_by_district(
                 y=sub['Percentage'],
                 name=group,
                 legendgroup=group,
-                showlegend=True,  # <-- Always show legend
-                marker_color=colors.get(group),
+                showlegend=True,  
+                marker=dict(
+                    color=colors.get(group),
+                    line=dict(width=0)  
+                ),
                 visible=(i == 0),
                 hovertemplate=f"<b>{group}</b><br>Year: %{{x}}<br>Share: %{{y:.1f}}%<extra></extra>"
             ))
@@ -1000,15 +1122,22 @@ def plot_stacked_bar_income_by_district(
         visibility = []
         for j in range(len(districts)):
             visibility.extend([(j == i)] * len(group_order))
+
         buttons.append(dict(
             label=district,
             method='update',
             args=[
                 {"visible": visibility},
-                {"title.text": f"{title} – {district}"}
+                {
+                    "title": {
+                        "text": f"{title} - {district}",
+                        "x": 0.5,
+                        "xanchor": "center",
+                        "font": dict(family="Arial", size=20, color="black")  # Keep styling consistent
+                    }
+                }
             ]
         ))
-
     # Layout update
     fig.update_layout(
         width=900,
@@ -1021,11 +1150,10 @@ def plot_stacked_bar_income_by_district(
             showactive=True,
             x=1.02,
             xanchor="left",
-            y=1.22,  # lifted up a bit
+            y=1.22,  
             yanchor="top",
             font=dict(size=12),
             bgcolor="white",
-            bordercolor="black",
             borderwidth=0.5
         )],
         title=dict(
@@ -1036,6 +1164,7 @@ def plot_stacked_bar_income_by_district(
 
         xaxis_title="Year",
         yaxis_title=y_axis_title,
+        yaxis=dict(tickvals=list(range(0, 110, 10))),
         font=dict(family="Arial", size=12),
         plot_bgcolor='rgba(0,0,0,0)',
         hovermode="x unified",
@@ -1050,6 +1179,18 @@ def plot_stacked_bar_income_by_district(
             traceorder="reversed"
         )
     )
+
+    for y in range(0, 110, 10):  
+        fig.add_shape(
+            type="line",
+            x0=0,
+            x1=1,
+            xref='paper',  
+            y0=y,
+            y1=y,
+            line=dict(color="rgba(255,255,255,0.3)", width=1),
+            layer="above"  
+        )
 
     # Axis styling
     fig.update_xaxes(
