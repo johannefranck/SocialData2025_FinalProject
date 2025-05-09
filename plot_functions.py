@@ -717,7 +717,7 @@ def plot_party_vote_share_dropdown(
                 {"visible": vis},
                 {
                     "title": {
-                        "text": f"Party Vote Shares Across Elections in {cname}",
+                        "text": f"Votes by Elections in {cname}",
                         "x": 0.5,
                         "xanchor": "center",
                         "font": dict(family="Arial", size=20, color="black")  # Keep styling consistent
@@ -729,7 +729,7 @@ def plot_party_vote_share_dropdown(
     # Layout settings
     fig.update_layout(
         title=dict(
-            text=f"Party Vote Shares Across Elections in {const_names[0]}",
+            text=f"Votes by Elections in {const_names[0]}",
             x=0.5,
             xanchor="center",
             font=dict(size=20, family="Arial", color="black")
