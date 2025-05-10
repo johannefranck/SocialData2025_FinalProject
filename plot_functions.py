@@ -596,7 +596,7 @@ def plot_stacked_bar_dist_per_const(years, kreds_ids, counts, legend, values, ht
     fig.show()
 
 # ------------------------------ Line plot per party over time  ----------------------------- #
-def plot_party_vote_share_over_time(df, party_colors, output_path):
+def plot_party_vote_share_over_time(df, party_colors, title, output_path):
     years = sorted(df['Year'].unique())
 
     fig = px.line(
@@ -605,7 +605,7 @@ def plot_party_vote_share_over_time(df, party_colors, output_path):
         y='VoteShare',
         color='Partyname',
         markers=True,
-        title='Vote Share per Party Over Time',
+        title=title,
         labels={'VoteShare': 'Vote Share (%)', 'Year': 'Election Year'},
         color_discrete_map=party_colors
     )
@@ -618,7 +618,7 @@ def plot_party_vote_share_over_time(df, party_colors, output_path):
 
     fig.update_layout(
         title=dict(
-            text='Vote Share by Party Over Time (2005-2022)',
+            text=title,
             x=0.5,
             font=dict(family="Arial", size=20, color="black")
         ),
