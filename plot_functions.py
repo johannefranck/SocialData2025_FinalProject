@@ -299,6 +299,65 @@ def plot_population_percentage_by_age_and_district(
     )
 
     plt.show()
+
+# ----------------------------- Line plot by year, by constituency, origin ----------------------------- # 
+def plot_population_percentage_by_origin_and_district(
+    df_grouped,
+    colors,
+    constituency_id_to_name,
+    const_order,
+    y_range=(0, 100),
+    title=""
+):
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+
+    df = df_grouped.copy()
+    df['KredsName'] = df['KredsNr'].map(constituency_id_to_name)
+
+    sns.set_theme(style="whitegrid", font="Arial")
+
+    districts = const_order
+    age_groups = sorted(df['Origin'].dropna().unique())
+    age_colors = {age: colors[i % len(colors)] for i, age in enumerate(age_groups)}
+
+    fig, axes = plt.subplots(4, 3, figsize=(16, 12), sharex=True, sharey=True)
+    axes = axes.flatten()
+
+    for idx, district in enumerate(districts):
+        ax = axes[idx]
+        df_d = df[df['KredsName'] == district]
+
+        plot = sns.lineplot(
+            data=df_d,
+            x='Year', y='Percentage', hue='Origin',
+            hue_order=age_groups,
+            palette=age_colors,
+            marker='o',
+            ax=ax,
+            legend = True
+        )
+
+        ax.set_title(district, fontsize=14, fontname='Arial')
+        ax.set_xlabel('')
+        ax.set_ylabel('Share of Population (%)', fontsize=12)
+        ax.set_ylim(*y_range)
+        ax.tick_params(labelsize=10)
+        
+        legend_handles, legend_labels = ax.get_legend_handles_labels()
+        ax.get_legend().remove()
+
+    fig.suptitle(title, fontsize=20, fontname='Arial')
+    plt.tight_layout(rect=[0, 0, 1, 0.90])
+
+    # Unified legend above all plots
+    fig.legend(
+        legend_handles, legend_labels, title='Origin',
+        loc='upper center', bbox_to_anchor=(0.5, 0.95),
+        ncol=4, fontsize=11, title_fontsize=12
+    )
+
+    plt.show()
     
 # ----------------------------- Grouped percentage bar plot  ----------------------------- #   
 def plot_grouped_percentage_bar(
